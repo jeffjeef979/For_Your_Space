@@ -1,0 +1,1 @@
+ALTER TABLE `voiceRequests` MODIFY COLUMN `intent` enum('informational','service_request','navigation','speaker_research','networking','other') DEFAULT 'other';
