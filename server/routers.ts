@@ -269,6 +269,33 @@ Answer the attendee's question concisely and helpfully. For speaker background q
         .orderBy(voiceRequests.createdAt);
       return result;
     }),
+
+  // WhatsApp forwarding: log message forwarding attempt and return wa.me deep link
+  forwardToWhatsApp: publicProcedure
+    .input(z.object({
+      eventId: z.number(),
+      attendeeName: z.string(),
+      message: z.string(),
+      organizerPhone: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      // Log the forwarding attempt in voice_requests as a service_request
+      if (db) {
+        await db.insert(voiceRequests).values({
+          eventId: input.eventId,
+          attendeeId: 0,
+          transcript: input.message,
+          intent: "service_request",
+          aiResponse: `Forwarded to organizer WhatsApp: ${input.organizerPhone}`,
+          status: "pending",
+        });
+      }
+      // Build the wa.me deep link (fallback approach — no WhatsApp Business API needed)
+      const encodedMsg = encodeURIComponent(`[Find your Space] ${input.attendeeName}: ${input.message}`);
+      const waUrl = `https://wa.me/${input.organizerPhone}?text=${encodedMsg}`;
+      return { success: true, waUrl, method: "deep_link" };
+    }),
 });
 
 export const appRouter = router({

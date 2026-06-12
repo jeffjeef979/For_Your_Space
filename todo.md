@@ -54,3 +54,38 @@
 - [x] Smart suggestions: recommend people to connect with based on user's LinkedIn background (role, industry, skills)
 - [x] Smart suggestions: recommend events/sessions to attend based on user's professional interests
 - [x] AI matching logic: analyze attendee profiles vs user profile for relevance scoring
+
+## Phase 9: Street View Approach Navigation
+- [x] Add Street View panorama panel synced to user's real-time geolocation
+- [x] Auto-update panorama heading/position as user moves along the route toward venue
+- [x] Show approach images from Google Maps Street View at key waypoints along the route
+- [x] Integrate with geolocation watchPosition for continuous tracking
+
+## Phase 10: Major UI Redesign — iOS Liquid Glass + Phone-First + Rebrand
+- [x] Rebrand to "Find your Space" with updated slogan
+- [x] Redesign with iOS Liquid Glass design language (frosted glass, blur, translucent layers, depth)
+- [x] Phone-first mobile-optimized layout with bottom navigation
+- [x] Luma-inspired event feed cards (clean, minimal chrome, elegant)
+- [x] Map as primary attendee view (full-screen map on load)
+- [x] Geo-triggered wayfinding: auto-show directions when attendee is near venue
+- [x] Post-registration WiFi password reveal flow
+- [x] Update page title and branding to "Find your Space" (in index.html and Login page)
+
+## Phase 11: WhatsApp Connector for Organizer Messaging
+- [x] Add WhatsApp messaging integration so attendee messages reach organizer on WhatsApp (via wa.me deep links)
+- [x] Backend endpoint `forwardToWhatsApp` logs forwarding attempts and returns wa.me deep link URL
+- [x] Frontend UI: attendee can send message to organizer via in-app chat + dedicated WhatsApp button
+- [x] wa.me deep link as primary method (no WhatsApp Business API key required)
+
+## Phase 12: Docusaurus Documentation Site
+- [x] Create docs/ folder with Docusaurus scaffold
+- [x] Write architecture overview documentation
+- [x] Write feature documentation for all modules
+- [x] Write setup and deployment guide
+- [x] Write API reference for tRPC endpoints
+
+## Phase 13: Login Page with Demo Accounts
+- [x] Create login page with two demo account options (Attendee + Organizer)
+- [x] Attendee demo account shows mobile map-first view, check-in, wayfinding, networking
+- [x] Organizer demo account shows dashboard with attendance, requests, WhatsApp forwarding
+- [x] Role-based routing after login (attendee vs organizer view)

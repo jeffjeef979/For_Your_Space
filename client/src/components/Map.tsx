@@ -94,7 +94,7 @@ const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
 
 let _mapScriptPromise: Promise<unknown> | null = null;
 
-function loadMapScript() {
+export function loadMapScript() {
   if (window.google?.maps) {
     return Promise.resolve(null);
   }
@@ -103,7 +103,7 @@ function loadMapScript() {
   }
   _mapScriptPromise = new Promise(resolve => {
     const script = document.createElement("script");
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
+    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry,streetView`;
     script.async = true;
     script.crossOrigin = "anonymous";
     script.onload = () => {

@@ -1,203 +1,224 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import { MapView } from "@/components/Map";
-import { Badge } from "@/components/ui/badge";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
+import { MapView, loadMapScript } from "@/components/Map";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
-  MapPin, Navigation, Mic, MicOff, Users, Calendar, Wifi,
-  TableProperties, Clock, CheckCircle2, Linkedin, Instagram,
-  UserCheck, Radio, ChevronRight, Loader2, MessageSquare,
-  Activity, Star, ExternalLink, Route, Brain, Sparkles,
-  Building2, GraduationCap, Briefcase, ArrowRight, Globe,
-  Car, Bus, Timer, AlertTriangle, ThumbsUp, Search,
+  MapPin, Calendar, Mic, Users, Sparkles, Navigation, Eye, Camera,
+  CheckCircle2, Wifi, Hash, Clock, Send, Phone, MessageCircle,
+  ChevronRight, Star, AlertTriangle, Car, Bus, Footprints, X,
+  LayoutDashboard, UserCheck, Bell
 } from "lucide-react";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────────
 
-type ViewMode = "attendee" | "organizer";
-type AttendeeTab = "map" | "events" | "voice" | "network" | "checkin" | "commute" | "suggest";
-type CheckInStep = "arrival" | "wifi" | "table" | "timeline";
+interface DemoEvent {
+  id: number;
+  title: string;
+  venueName: string;
+  venueAddress: string;
+  venueLat: number;
+  venueLng: number;
+  startTime: string;
+  endTime: string;
+  wifiSsid: string;
+  wifiPassword: string;
+  totalRsvps: number;
+  checkedIn: number;
+}
 
-// ─── Demo Data ───────────────────────────────────────────────────────────────
+interface Attendee {
+  id: number;
+  name: string;
+  role: string;
+  company: string;
+  industry: string;
+  skills: string[];
+  linkedin?: string;
+  instagram?: string;
+  checkedInAt?: string;
+  tableNumber?: number;
+  lat?: number;
+  lng?: number;
+}
 
-const DEMO_EVENT = {
+interface Session {
+  id: number;
+  title: string;
+  speaker: string;
+  time: string;
+  location: string;
+  attendees: number;
+  status: "live" | "next" | "upcoming";
+}
+
+// ─── Demo Data ──────────────────────────────────────────────────────────────────
+
+const DEMO_EVENT: DemoEvent = {
   id: 1,
   title: "TechSummit 2026",
   venueName: "Marina Bay Sands Expo",
   venueAddress: "10 Bayfront Ave, Singapore 018956",
   venueLat: 1.2834,
   venueLng: 103.8607,
-  startTime: "2026-06-12T09:00:00",
-  endTime: "2026-06-12T18:00:00",
-  wifiSsid: "TechSummit_2026",
-  wifiPassword: "TS2026#Secure!",
-  attendeeCount: 342,
-  rsvpCount: 400,
+  startTime: "9:00 AM",
+  endTime: "6:00 PM",
+  wifiSsid: "TechSummit-Guest",
+  wifiPassword: "TS2026!Connect",
+  totalRsvps: 400,
+  checkedIn: 342,
 };
 
-const DEMO_EVENTS = [
-  { id: 1, title: "TechSummit 2026", venue: "Marina Bay Sands Expo", venueAddress: "10 Bayfront Ave, Singapore", time: "Today, 9:00 AM – 6:00 PM", status: "active", attendees: 342, rsvp: true, lat: 1.2834, lng: 103.8607, tags: ["AI", "Engineering", "Product"] },
-  { id: 2, title: "AI & Future of Work", venue: "Suntec City Hall 4", venueAddress: "1 Raffles Blvd, Singapore", time: "Jun 18, 2:00 PM – 5:00 PM", status: "upcoming", attendees: 180, rsvp: false, lat: 1.2931, lng: 103.8572, tags: ["AI", "Future of Work", "HR Tech"] },
-  { id: 3, title: "Design Systems Workshop", venue: "The Hive Carpenter", venueAddress: "36 Carpenter St, Singapore", time: "Jun 18, 3:00 PM – 6:00 PM", status: "upcoming", attendees: 60, rsvp: false, lat: 1.2870, lng: 103.8467, tags: ["Design", "UX", "Frontend"] },
-  { id: 4, title: "Startup Pitch Night", venue: "Block71 Singapore", venueAddress: "71 Ayer Rajah Crescent, Singapore", time: "Jun 20, 7:00 PM – 10:00 PM", status: "upcoming", attendees: 120, rsvp: false, lat: 1.2966, lng: 103.7874, tags: ["Startups", "VC", "Pitching"] },
+const DEMO_ATTENDEES: Attendee[] = [
+  { id: 1, name: "Sarah Chen", role: "VP Engineering", company: "TechCorp", industry: "Technology", skills: ["AI", "ML", "Python"], linkedin: "linkedin.com/in/sarahchen", instagram: "@sarahchen_tech", checkedInAt: "2:31 PM", tableNumber: 12, lat: 1.2836, lng: 103.8609 },
+  { id: 2, name: "Alex Kim", role: "Product Lead", company: "Stripe", industry: "Fintech", skills: ["Product", "APIs", "Growth"], linkedin: "linkedin.com/in/alexkim", checkedInAt: "2:28 PM", tableNumber: 8, lat: 1.2832, lng: 103.8605 },
+  { id: 3, name: "Mike Torres", role: "Design Director", company: "Figma", industry: "Design", skills: ["UX", "Systems", "Prototyping"], linkedin: "linkedin.com/in/miketorres", instagram: "@mikedesigns", checkedInAt: "2:25 PM", tableNumber: 5, lat: 1.2838, lng: 103.8611 },
+  { id: 4, name: "Priya Sharma", role: "CTO", company: "DataFlow", industry: "Data", skills: ["Big Data", "Spark", "Architecture"], linkedin: "linkedin.com/in/priyasharma", checkedInAt: "2:20 PM", tableNumber: 3, lat: 1.2830, lng: 103.8603 },
+  { id: 5, name: "James Liu", role: "Founder", company: "NeuralAI", industry: "AI", skills: ["Deep Learning", "NLP", "Startups"], linkedin: "linkedin.com/in/jamesliu", instagram: "@jamesliu_ai", checkedInAt: "2:15 PM", tableNumber: 15, lat: 1.2835, lng: 103.8608 },
 ];
 
-const DEMO_TIMELINE = [
-  { time: "9:00 AM", title: "Registration & Welcome Coffee", location: "Lobby", done: true },
-  { time: "10:00 AM", title: "Opening Keynote: AI in 2026", location: "Main Hall", done: true, speaker: "Dr. Fei-Fei Li" },
-  { time: "11:30 AM", title: "Panel: Future of Work", location: "Hall A", done: false, active: true, speaker: "Multiple Panelists" },
-  { time: "1:00 PM", title: "Networking Lunch", location: "Atrium", done: false },
-  { time: "2:30 PM", title: "Workshop: LLM Applications", location: "Room 301", done: false, speaker: "Andrej Karpathy" },
-  { time: "4:00 PM", title: "Startup Showcase", location: "Exhibition Floor", done: false },
-  { time: "5:30 PM", title: "Closing Remarks & Awards", location: "Main Hall", done: false },
+const DEMO_SESSIONS: Session[] = [
+  { id: 1, title: "Keynote: Future of AI", speaker: "Dr. Sarah Chen", time: "9:00 AM – 10:30 AM", location: "Main Hall", attendees: 156, status: "live" },
+  { id: 2, title: "Workshop: Building with LLMs", speaker: "Alex Kim", time: "11:00 AM – 12:30 PM", location: "Room 3B", attendees: 48, status: "next" },
+  { id: 3, title: "Panel: Design Systems at Scale", speaker: "Mike Torres + Panel", time: "2:00 PM – 3:00 PM", location: "Room 2A", attendees: 72, status: "upcoming" },
+  { id: 4, title: "Networking: AI & Fintech", speaker: "Community", time: "3:30 PM – 4:30 PM", location: "Lounge", attendees: 35, status: "upcoming" },
 ];
 
-const DEMO_SPEAKERS = [
-  { name: "Dr. Fei-Fei Li", role: "Professor of CS @ Stanford", linkedin: "faboratory", expertise: ["Computer Vision", "AI Ethics", "ImageNet"], bio: "Co-Director of Stanford HAI. Pioneer in computer vision and AI. Created ImageNet which revolutionized deep learning.", avatar: "FL", color: "from-purple-600 to-indigo-600" },
-  { name: "Andrej Karpathy", role: "AI Researcher & Educator", linkedin: "andrejkarpathy", expertise: ["Deep Learning", "Tesla Autopilot", "GPT"], bio: "Former Director of AI at Tesla. Founded and teaches AI courses. Key contributor to GPT and neural network research.", avatar: "AK", color: "from-teal-600 to-cyan-600" },
-  { name: "Sarah Chen", role: "Product Lead @ Stripe", linkedin: "sarahchen", expertise: ["Payments", "Product Strategy", "Fintech"], bio: "Leading product strategy for Stripe's enterprise platform. Previously at Square and Goldman Sachs.", avatar: "SC", color: "from-pink-500 to-rose-500" },
-  { name: "Marcus Rivera", role: "CTO @ Nexus AI", linkedin: "marcusrivera", expertise: ["MLOps", "Infrastructure", "Scaling"], bio: "Building next-gen AI infrastructure. Ex-Google Brain, scaled ML systems to billions of predictions/day.", avatar: "MR", color: "from-amber-500 to-orange-500" },
-];
+const ORGANIZER_PHONE = "6591234567";
 
-const DEMO_ATTENDEES = [
-  { name: "Sarah Chen", role: "Product Lead @ Stripe", linkedin: "sarahchen", instagram: "sarah.builds", avatar: "SC", color: "from-purple-500 to-indigo-500", skills: ["Product", "Fintech", "Strategy"], company: "Stripe", industry: "Fintech" },
-  { name: "Marcus Rivera", role: "CTO @ Nexus AI", linkedin: "marcusrivera", instagram: "marcus.tech", avatar: "MR", color: "from-teal-500 to-cyan-500", skills: ["MLOps", "Infrastructure", "Leadership"], company: "Nexus AI", industry: "AI" },
-  { name: "Priya Nair", role: "Design Director @ Figma", linkedin: "priyanair", instagram: "priya.designs", avatar: "PN", color: "from-pink-500 to-rose-500", skills: ["Design Systems", "UX Research", "Leadership"], company: "Figma", industry: "Design Tools" },
-  { name: "James Wu", role: "Founder @ DataFlow", linkedin: "jameswu", instagram: "jameswu.io", avatar: "JW", color: "from-amber-500 to-orange-500", skills: ["Data Engineering", "Startups", "Python"], company: "DataFlow", industry: "Data" },
-  { name: "Aisha Okonkwo", role: "ML Engineer @ DeepMind", linkedin: "aishaokonkwo", instagram: "aisha.ml", avatar: "AO", color: "from-violet-500 to-purple-500", skills: ["Machine Learning", "Research", "PyTorch"], company: "DeepMind", industry: "AI" },
-  { name: "Tom Bergmann", role: "VP Engineering @ Vercel", linkedin: "tombergmann", instagram: "tom.dev", avatar: "TB", color: "from-blue-500 to-sky-500", skills: ["Frontend", "Infrastructure", "Next.js"], company: "Vercel", industry: "Developer Tools" },
-  { name: "Lena Fischer", role: "Data Scientist @ Meta", linkedin: "lenafischer", instagram: "lena.data", avatar: "LF", color: "from-green-500 to-emerald-500", skills: ["NLP", "Analytics", "Python"], company: "Meta", industry: "Social Media" },
-  { name: "Raj Patel", role: "PM @ Google DeepMind", linkedin: "rajpatel", instagram: "raj.pm", avatar: "RP", color: "from-red-500 to-pink-500", skills: ["Product", "AI", "Strategy"], company: "Google", industry: "AI" },
-];
+// ─── Main Platform Component ────────────────────────────────────────────────────
 
-// Simulated current user profile (would come from LinkedIn OAuth in production)
-const CURRENT_USER = {
-  name: "Alex Johnson",
-  role: "Senior Engineer @ TechCorp",
-  linkedin: "alexjohnson",
-  skills: ["AI", "Machine Learning", "Python", "Infrastructure"],
-  industry: "AI",
-  interests: ["Deep Learning", "MLOps", "Startups", "Product"],
-};
+export default function EventPlatform() {
+  const [, navigate] = useLocation();
+  const [location] = useLocation();
+  const isOrganizer = location === "/organizer" || sessionStorage.getItem("demo_role") === "organizer";
+  const [activeTab, setActiveTab] = useState(isOrganizer ? "dashboard" : "map");
 
-const DEMO_CHECKIN_LIST = [
-  { name: "Sarah Chen", table: "A3", time: "9:02 AM", status: "checked_in" },
-  { name: "Marcus Rivera", table: "B1", time: "9:08 AM", status: "checked_in" },
-  { name: "Priya Nair", table: "A1", time: "9:15 AM", status: "checked_in" },
-  { name: "James Wu", table: "C2", time: "9:22 AM", status: "checked_in" },
-  { name: "Aisha Okonkwo", table: "B3", time: "9:31 AM", status: "checked_in" },
-  { name: "Tom Bergmann", table: "A2", time: "9:45 AM", status: "pending" },
-  { name: "Lena Fischer", table: "D1", time: "—", status: "pending" },
-  { name: "Raj Patel", table: "C1", time: "—", status: "pending" },
-];
+  const attendeeTabs = [
+    { id: "map", icon: MapPin, label: "Map" },
+    { id: "events", icon: Calendar, label: "Events" },
+    { id: "ai", icon: Mic, label: "AI" },
+    { id: "network", icon: Users, label: "People" },
+    { id: "checkin", icon: CheckCircle2, label: "Check-In" },
+  ];
 
-const DEMO_VOICE_REQUESTS = [
-  { name: "Marcus Rivera", table: "B1", query: "Where is the nearest restroom?", intent: "navigation", time: "11:02 AM", status: "answered" },
-  { name: "Priya Nair", table: "A1", query: "Can we get more water at Table A1?", intent: "service_request", time: "11:18 AM", status: "pending" },
-  { name: "James Wu", table: "C2", query: "What time does the workshop start?", intent: "informational", time: "11:24 AM", status: "answered" },
-  { name: "Aisha Okonkwo", table: "B3", query: "Tell me about Andrej Karpathy's background", intent: "speaker_research", time: "11:31 AM", status: "answered" },
-];
+  const organizerTabs = [
+    { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { id: "checkins", icon: UserCheck, label: "Check-Ins" },
+    { id: "requests", icon: Bell, label: "Requests" },
+    { id: "map", icon: MapPin, label: "Map" },
+  ];
 
-const VOICE_EXAMPLES = [
-  "Where is my table?",
-  "Tell me about the keynote speaker",
-  "How do I get to Suntec City from here?",
-  "Who should I connect with in AI?",
-];
+  const tabs = isOrganizer ? organizerTabs : attendeeTabs;
 
-// ─── Utility: Relevance Scoring ──────────────────────────────────────────────
-
-function computeRelevanceScore(userSkills: string[], userIndustry: string, targetSkills: string[], targetIndustry: string): number {
-  let score = 0;
-  const userSet = new Set(userSkills.map(s => s.toLowerCase()));
-  targetSkills.forEach(s => { if (userSet.has(s.toLowerCase())) score += 25; });
-  if (userIndustry.toLowerCase() === targetIndustry.toLowerCase()) score += 30;
-  return Math.min(score, 99);
-}
-
-// ─── Background Decoration ───────────────────────────────────────────────────
-
-function BackgroundDecoration() {
   return (
-    <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
-      <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-[0.06]"
-        style={{ background: "radial-gradient(circle, oklch(0.55 0.22 290), transparent 70%)" }} />
-      <div className="absolute top-1/2 -left-48 w-80 h-80 rounded-full opacity-[0.05]"
-        style={{ background: "radial-gradient(circle, oklch(0.62 0.18 200), transparent 70%)" }} />
-      <div className="absolute -bottom-24 right-1/3 w-72 h-72 rounded-full opacity-[0.04]"
-        style={{ background: "radial-gradient(circle, oklch(0.58 0.20 240), transparent 70%)" }} />
-      <div className="absolute top-[22%] left-0 right-0 h-px gradient-line-h opacity-60" />
-      <div className="absolute top-[55%] left-0 right-0 h-px gradient-line-h opacity-40" />
-      <div className="absolute top-[78%] left-0 right-0 h-px gradient-line-h opacity-30" />
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
+      {/* Header */}
+      <header className="glass-heavy px-4 py-3 flex items-center justify-between shrink-0 z-30 relative">
+        <div className="flex items-center gap-2.5">
+          <h1 className="brand-title text-lg leading-none">Find your Space</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="pill pill-live text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse-soft" />
+            Live
+          </span>
+          <button
+            onClick={() => { sessionStorage.removeItem("demo_role"); navigate("/"); }}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md"
+          >
+            Exit
+          </button>
+        </div>
+      </header>
+
+      {/* Event Info Bar */}
+      <div className="px-4 py-2 border-b border-border/30 bg-muted/30 flex items-center justify-between shrink-0">
+        <div>
+          <p className="text-xs font-semibold">{DEMO_EVENT.title}</p>
+          <p className="text-[10px] text-muted-foreground">{DEMO_EVENT.venueName} · Today, {DEMO_EVENT.startTime} – {DEMO_EVENT.endTime}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-medium">{DEMO_EVENT.checkedIn}/{DEMO_EVENT.totalRsvps}</p>
+          <p className="text-[9px] text-muted-foreground">checked in</p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-hidden relative">
+        {activeTab === "map" && <MapsPanel />}
+        {activeTab === "events" && <EventsPanel />}
+        {activeTab === "ai" && <AIPanel />}
+        {activeTab === "network" && <NetworkPanel />}
+        {activeTab === "checkin" && <CheckInPanel />}
+        {activeTab === "dashboard" && <OrganizerDashboard />}
+        {activeTab === "checkins" && <CheckInListPanel />}
+        {activeTab === "requests" && <RequestsPanel />}
+      </main>
+
+      {/* Bottom Navigation - in flow, not fixed */}
+      <nav className="shrink-0 border-t border-border/30 bg-white/85 backdrop-blur-xl" style={{ zIndex: 9999 }}>
+        <div className="flex items-center justify-around px-2 py-2 pb-[env(safe-area-inset-bottom)]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`nav-item ${activeTab === tab.id ? "active" : ""}`}
+            >
+              <tab.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
 
-// ─── Header ──────────────────────────────────────────────────────────────────
-
-function PlatformHeader({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (v: ViewMode) => void }) {
-  return (
-    <header className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-border/50 bg-white/80 backdrop-blur-md">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "var(--gradient-brand)" }}>
-          <Radio className="w-4 h-4 text-white" />
-        </div>
-        <div>
-          <h1 className="text-base font-black gradient-text" style={{ fontFamily: "'Syne', sans-serif" }}>EventHub</h1>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">All-in-One Event Platform</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="text-xs gap-1 border-green-200 text-green-700 bg-green-50">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> TechSummit 2026 · Live
-        </Badge>
-        <div className="flex rounded-lg border border-border overflow-hidden">
-          <button onClick={() => setViewMode("attendee")}
-            className={`px-3 py-1.5 text-xs font-semibold transition-all ${viewMode === "attendee" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
-            style={viewMode === "attendee" ? { background: "var(--gradient-brand)" } : {}}>
-            <Users className="w-3 h-3 inline mr-1" />Attendee
-          </button>
-          <button onClick={() => setViewMode("organizer")}
-            className={`px-3 py-1.5 text-xs font-semibold transition-all ${viewMode === "organizer" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
-            style={viewMode === "organizer" ? { background: "var(--gradient-brand)" } : {}}>
-            <Activity className="w-3 h-3 inline mr-1" />Organizer
-          </button>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-// ─── Module 1: Interactive Google Maps ───────────────────────────────────────
+// ─── Maps Panel (Primary Attendee View) ─────────────────────────────────────────
 
 function MapsPanel() {
-  const [locating, setLocating] = useState(false);
-  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const streetViewRef = useRef<HTMLDivElement>(null);
+  const routePathRef = useRef<google.maps.LatLng[]>([]);
+  const [showStreetView, setShowStreetView] = useState(false);
+  const [tracking, setTracking] = useState(false);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+  const [approachStep, setApproachStep] = useState(0);
+  const [totalSteps, setTotalSteps] = useState(0);
+  const watchIdRef = useRef<number | null>(null);
+  const streetViewPanoRef = useRef<google.maps.StreetViewPanorama | null>(null);
+  const autoWayfindTriggered = useRef(false);
 
-  const locateMe = () => {
-    setLocating(true);
-    if (!navigator.geolocation) {
-      toast.error("Geolocation not supported by your browser.");
-      setLocating(false);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
+  // Geo-triggered auto-wayfinding: when user is within 2km of venue, auto-show directions
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const geoWatchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (mapRef.current) {
-          new google.maps.marker.AdvancedMarkerElement({ map: mapRef.current, position: userPos, title: "You" });
-          mapRef.current.panTo(userPos);
+        if (autoWayfindTriggered.current) return;
+        const userLat = pos.coords.latitude;
+        const userLng = pos.coords.longitude;
+        const venueLat = DEMO_EVENT.venueLat;
+        const venueLng = DEMO_EVENT.venueLng;
+        // Haversine approximation for distance in km
+        const R = 6371;
+        const dLat = ((venueLat - userLat) * Math.PI) / 180;
+        const dLng = ((venueLng - userLng) * Math.PI) / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos((userLat * Math.PI) / 180) * Math.cos((venueLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+        const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        if (dist <= 2) {
+          autoWayfindTriggered.current = true;
+          toast.info("You're nearby! Showing directions to the venue.");
+          getDirections();
         }
-        setLocating(false);
-        toast.success("Location found!");
       },
-      () => { setLocating(false); toast.error("Unable to get your location."); }
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
     );
-  };
+    return () => navigator.geolocation.clearWatch(geoWatchId);
+  }, []);
 
   const getDirections = () => {
     if (!navigator.geolocation) { toast.error("Geolocation not supported."); return; }
@@ -211,13 +232,19 @@ function MapsPanel() {
             directionsRendererRef.current = new google.maps.DirectionsRenderer({ map: mapRef.current });
           }
           directionsService.route(
-            { origin, destination, travelMode: google.maps.TravelMode.DRIVING },
+            { origin, destination, travelMode: google.maps.TravelMode.WALKING },
             (result, status) => {
               if (status === "OK" && result) {
                 directionsRendererRef.current!.setDirections(result);
                 const leg = result.routes[0]?.legs[0];
-                if (leg) setRouteInfo({ distance: leg.distance?.text ?? "", duration: leg.duration?.text ?? "" });
+                if (leg) {
+                  setRouteInfo({ distance: leg.distance?.text ?? "", duration: leg.duration?.text ?? "" });
+                  const path = result.routes[0].overview_path;
+                  routePathRef.current = path;
+                  setTotalSteps(path.length);
+                }
                 toast.success("Route calculated!");
+                setShowStreetView(true);
               } else {
                 toast.error("Could not calculate route.");
               }
@@ -225,54 +252,154 @@ function MapsPanel() {
           );
         }
       },
-      () => toast.error("Unable to get your location for directions.")
+      () => toast.error("Unable to get your location.")
     );
   };
 
+  const initStreetView = useCallback(() => {
+    if (!streetViewRef.current || streetViewPanoRef.current) return;
+    loadMapScript().then(() => {
+      const pano = new google.maps.StreetViewPanorama(streetViewRef.current!, {
+        position: { lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng },
+        pov: { heading: 0, pitch: 0 },
+        zoom: 1,
+        disableDefaultUI: true,
+        showRoadLabels: false,
+      });
+      streetViewPanoRef.current = pano;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (showStreetView) initStreetView();
+  }, [showStreetView, initStreetView]);
+
+  const startTracking = () => {
+    if (!navigator.geolocation) return;
+    setTracking(true);
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const userPos = new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        const path = routePathRef.current;
+        if (path.length === 0) return;
+        let minDist = Infinity;
+        let closestIdx = 0;
+        path.forEach((pt, i) => {
+          const d = google.maps.geometry.spherical.computeDistanceBetween(userPos, pt);
+          if (d < minDist) { minDist = d; closestIdx = i; }
+        });
+        setApproachStep(closestIdx);
+        if (streetViewPanoRef.current && path[closestIdx]) {
+          const heading = google.maps.geometry.spherical.computeHeading(
+            path[closestIdx],
+            new google.maps.LatLng(DEMO_EVENT.venueLat, DEMO_EVENT.venueLng)
+          );
+          streetViewPanoRef.current.setPosition(path[closestIdx]);
+          streetViewPanoRef.current.setPov({ heading, pitch: 0 });
+        }
+      },
+      null,
+      { enableHighAccuracy: true, maximumAge: 3000 }
+    );
+  };
+
+  const stopTracking = () => {
+    setTracking(false);
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Venue Map</span>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={locateMe} disabled={locating}>
-            <Navigation className="w-3 h-3" />{locating ? "Locating..." : "Locate Me"}
-          </Button>
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={getDirections}
-            style={{ background: "var(--gradient-brand)", border: "none" }}>
-            <Route className="w-3 h-3" />Directions
-          </Button>
-        </div>
-      </div>
-      {routeInfo && (
-        <div className="px-4 py-2 bg-primary/5 border-b border-primary/20 flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1 font-semibold text-primary"><Car className="w-3 h-3" />{routeInfo.duration}</span>
-          <span className="text-muted-foreground">{routeInfo.distance}</span>
+    <div className="h-full flex flex-col">
+      {/* Street View Approach */}
+      {showStreetView && (
+        <div className="shrink-0 border-b border-border/30 animate-slide-up">
+          <div className="px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Camera className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-semibold">Approach View</span>
+              {tracking && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {!tracking ? (
+                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={startTracking}>
+                  <Navigation className="w-2.5 h-2.5" />Live
+                </Button>
+              ) : (
+                <Button size="sm" variant="destructive" className="h-6 text-[10px] gap-1 px-2" onClick={stopTracking}>
+                  Stop
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowStreetView(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+          <div ref={streetViewRef} className="w-full h-[160px] bg-muted" />
+          {totalSteps > 0 && (
+            <div className="px-4 py-1.5 bg-muted/30 flex items-center gap-2">
+              <Eye className="w-2.5 h-2.5 text-muted-foreground" />
+              <div className="flex-1 h-1 rounded-full bg-border overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-300" style={{ width: `${(approachStep / Math.max(totalSteps, 1)) * 100}%`, background: "var(--gradient-brand)" }} />
+              </div>
+              <span className="text-[9px] text-muted-foreground">{Math.round((approachStep / Math.max(totalSteps, 1)) * 100)}%</span>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Map */}
       <div className="flex-1 relative">
         <MapView
           className="w-full h-full"
           initialCenter={{ lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng }}
-          initialZoom={15}
+          initialZoom={16}
           onMapReady={(map) => {
             mapRef.current = map;
-            new google.maps.marker.AdvancedMarkerElement({ map, position: { lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng }, title: DEMO_EVENT.venueName });
+            new google.maps.marker.AdvancedMarkerElement({
+              map,
+              position: { lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng },
+              title: DEMO_EVENT.venueName,
+            });
           }}
         />
+
+        {/* Floating action buttons */}
+        <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+          <button onClick={getDirections} className="glass-heavy w-11 h-11 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+            <Navigation className="w-5 h-5 text-primary" />
+          </button>
+          <button onClick={() => setShowStreetView(!showStreetView)} className="glass-heavy w-11 h-11 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+            <Eye className="w-5 h-5 text-accent" />
+          </button>
+        </div>
+
+        {/* Route info overlay */}
+        {routeInfo && (
+          <div className="absolute top-4 left-4 glass-card px-3 py-2 animate-slide-up">
+            <p className="text-xs font-semibold">{routeInfo.duration}</p>
+            <p className="text-[10px] text-muted-foreground">{routeInfo.distance} walking</p>
+          </div>
+        )}
       </div>
-      <div className="px-4 py-2 border-t border-border/50 bg-muted/30 text-xs text-muted-foreground flex items-center gap-1.5">
-        <MapPin className="w-3 h-3" /> {DEMO_EVENT.venueName} · {DEMO_EVENT.venueAddress}
+
+      {/* Venue footer */}
+      <div className="px-4 py-2.5 glass-heavy border-t border-border/30 flex items-center gap-2 shrink-0">
+        <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium truncate">{DEMO_EVENT.venueName}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{DEMO_EVENT.venueAddress}</p>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Module 2: Luma Event Feed with Conflict Detection ───────────────────────
+// ─── Events Panel ───────────────────────────────────────────────────────────────
 
-function EventFeedPanel() {
+function EventsPanel() {
   const [rsvpd, setRsvpd] = useState<number[]>([1]);
 
   const toggleRsvp = (id: number) => {
@@ -280,130 +407,124 @@ function EventFeedPanel() {
     toast.success(rsvpd.includes(id) ? "RSVP cancelled" : "RSVP confirmed!");
   };
 
-  // Detect overlapping events
-  const conflicts = useMemo(() => {
-    // Events 2 and 3 overlap (Jun 18 afternoon)
-    return [{ eventA: 2, eventB: 3, message: "AI & Future of Work overlaps with Design Systems Workshop on Jun 18" }];
-  }, []);
+  const statusColors: Record<string, string> = {
+    live: "pill-live",
+    next: "bg-amber-50 text-amber-700 border-amber-200",
+    upcoming: "",
+  };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Event Feed</span>
-        </div>
-        <Badge variant="secondary" className="text-xs">via Luma</Badge>
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-4 space-y-3 pb-24">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Today's Schedule</h2>
+        <span className="text-[10px] text-muted-foreground">{DEMO_SESSIONS.length} sessions</span>
       </div>
 
-      {conflicts.length > 0 && (
-        <div className="mx-3 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs font-semibold text-amber-800">Schedule Conflict Detected</p>
-            <p className="text-[11px] text-amber-700 mt-0.5">{conflicts[0].message}</p>
-            <p className="text-[10px] text-amber-600 mt-1">Check the Commute tab to see travel time between venues.</p>
-          </div>
-        </div>
-      )}
-
-      <ScrollArea className="flex-1">
-        <div className="p-3 space-y-3">
-          {DEMO_EVENTS.map((event) => (
-            <div key={event.id}
-              className={`rounded-xl border p-3.5 transition-all duration-200 hover:shadow-md ${event.status === "active" ? "border-primary/30 bg-primary/[0.03]" : "border-border bg-white"}`}>
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    {event.status === "active" && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> LIVE
-                      </span>
-                    )}
-                    {event.status === "upcoming" && (
-                      <span className="text-[10px] font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">Upcoming</span>
-                    )}
-                    {conflicts.some(c => c.eventA === event.id || c.eventB === event.id) && (
-                      <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">⚠ Overlap</span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground truncate">{event.title}</h3>
-                  <p className="text-xs text-muted-foreground">{event.venue}</p>
-                </div>
+      {DEMO_SESSIONS.map((session, i) => (
+        <div key={session.id} className="glass-card p-4 animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                {session.status !== "upcoming" && (
+                  <span className={`pill text-[9px] ${statusColors[session.status]}`}>
+                    {session.status === "live" && <span className="w-1 h-1 rounded-full bg-green-500" />}
+                    {session.status === "live" ? "Live" : "Next"}
+                  </span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {event.tags.map(tag => (
-                  <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">{tag}</span>
-                ))}
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{event.time}</span>
-                  <span className="flex items-center gap-1"><Users className="w-3 h-3" />{event.attendees}</span>
-                </div>
-                <Button size="sm"
-                  onClick={() => toggleRsvp(event.id)}
-                  className={`h-6 text-[11px] px-2.5 ${rsvpd.includes(event.id) ? "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20" : ""}`}
-                  variant={rsvpd.includes(event.id) ? "outline" : "default"}
-                  style={!rsvpd.includes(event.id) ? { background: "var(--gradient-brand)", border: "none" } : {}}>
-                  {rsvpd.includes(event.id) ? <><CheckCircle2 className="w-3 h-3 mr-1" />RSVP'd</> : "RSVP"}
-                </Button>
+              <p className="text-sm font-semibold leading-tight">{session.title}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{session.speaker}</p>
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{session.time}</span>
+                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{session.location}</span>
               </div>
             </div>
-          ))}
+            <button
+              onClick={() => toggleRsvp(session.id)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all active:scale-95 ${
+                rsvpd.includes(session.id)
+                  ? "bg-primary text-white"
+                  : "bg-muted text-foreground hover:bg-muted/80"
+              }`}
+            >
+              {rsvpd.includes(session.id) ? "RSVP'd" : "RSVP"}
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border/30">
+            <Users className="w-3 h-3 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground">{session.attendees} attending</span>
+          </div>
         </div>
-      </ScrollArea>
+      ))}
+
+      {/* Conflict Warning */}
+      <div className="glass-card p-3 border-amber-200/50 bg-amber-50/30 animate-slide-up" style={{ animationDelay: "240ms" }}>
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          <p className="text-[11px] text-amber-800 font-medium">Schedule Conflict Detected</p>
+        </div>
+        <p className="text-[10px] text-amber-700/80 mt-1 ml-5.5">Workshop A and Panel Discussion overlap by 30 min. Commute between venues: 8 min by car.</p>
+      </div>
     </div>
   );
 }
 
-// ─── Module 3: Voice Recognition + AI Speaker Research ───────────────────────
+// ─── AI Voice Panel ─────────────────────────────────────────────────────────────
 
-function VoicePanel() {
+function AIPanel() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: "user" | "ai"; text: string }>>([
+    { role: "ai", text: "Hi! I'm your event assistant. Ask me anything — \"Where is my table?\", \"Tell me about the keynote speaker\", or \"I need help from the organizer\"." },
+  ]);
+  const [inputText, setInputText] = useState("");
   const recognitionRef = useRef<any>(null);
 
-  const processVoice = trpc.event.processVoice.useMutation({
-    onSuccess: (data: { response: string; intent: string }) => {
-      setAiResponse(data.response);
-      setIsProcessing(false);
-    },
-    onError: () => {
-      setAiResponse("I'm sorry, I couldn't process that request. Please try again.");
-      setIsProcessing(false);
-    },
-  });
+  const processMessage = (text: string) => {
+    setMessages(prev => [...prev, { role: "user", text }]);
+    // Simulate AI response
+    setTimeout(() => {
+      let response = "";
+      const lower = text.toLowerCase();
+      if (lower.includes("table")) {
+        response = "You're assigned to Table 12 in the Main Hall. It's on the left side as you enter through the main doors.";
+      } else if (lower.includes("wifi") || lower.includes("password")) {
+        response = `WiFi Network: ${DEMO_EVENT.wifiSsid}\nPassword: ${DEMO_EVENT.wifiPassword}`;
+      } else if (lower.includes("speaker") || lower.includes("sarah") || lower.includes("chen")) {
+        response = "Dr. Sarah Chen is VP of Engineering at TechCorp. She specializes in AI/ML systems and has published 12 papers on large language models. She previously led the ML platform team at Google.";
+      } else if (lower.includes("next") || lower.includes("schedule")) {
+        response = "Next up: Workshop: Building with LLMs by Alex Kim at 11:00 AM in Room 3B. 48 people attending.";
+      } else if (lower.includes("organizer") || lower.includes("help")) {
+        response = "I've forwarded your message to the organizer via WhatsApp. They'll get back to you shortly!";
+        // Trigger WhatsApp deep link
+        const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent(`[Find your Space] Attendee request: ${text}`)}`;
+        window.open(waUrl, "_blank");
+      } else {
+        response = "I can help with directions, your table number, the schedule, speaker info, or connecting you with the organizer. What would you like to know?";
+      }
+      setMessages(prev => [...prev, { role: "ai", text: response }]);
+    }, 800);
+  };
 
   const startListening = () => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      toast.error("Voice recognition not supported in this browser.");
-      return;
-    }
-    const recognition = new SpeechRecognitionAPI() as any;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { toast.error("Voice not supported in this browser."); return; }
+    const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.onresult = (e: any) => {
-      const results = Array.from(e.results as ArrayLike<any>);
-      const t = results.map((r: any) => r[0].transcript).join("");
-      setTranscript(t);
+      const text = Array.from(e.results).map((r: any) => r[0].transcript).join("");
+      setTranscript(text);
     };
     recognition.onend = () => {
       setIsListening(false);
+      if (transcript.trim()) processMessage(transcript.trim());
+      setTranscript("");
     };
-    recognition.onerror = () => {
-      setIsListening(false);
-      toast.error("Voice recognition error. Please try again.");
-    };
-    recognitionRef.current = recognition;
     recognition.start();
+    recognitionRef.current = recognition;
     setIsListening(true);
-    setTranscript("");
-    setAiResponse("");
   };
 
   const stopListening = () => {
@@ -411,841 +532,428 @@ function VoicePanel() {
     setIsListening(false);
   };
 
-  const submitQuery = (query: string) => {
-    setTranscript(query);
-    setIsProcessing(true);
-    setAiResponse("");
-    processVoice.mutate({ query, eventId: 1, attendeeName: CURRENT_USER.name });
-  };
-
-  // Auto-submit when speech ends
-  useEffect(() => {
-    if (!isListening && transcript && !isProcessing && !aiResponse) {
-      setIsProcessing(true);
-      processVoice.mutate({ query: transcript, eventId: 1, attendeeName: CURRENT_USER.name });
-    }
-  }, [isListening]);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">AI Assistant</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {isListening && (
-            <Badge className="text-xs gap-1 bg-red-50 text-red-600 border-red-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> Listening
-            </Badge>
-          )}
-          <Badge variant="secondary" className="text-[10px]">Speaker Research Enabled</Badge>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col p-4 gap-4 overflow-auto">
-        {/* Mic button */}
-        <div className="flex flex-col items-center gap-2">
-          <button
-            onClick={isListening ? stopListening : startListening}
-            className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${isListening ? "scale-110" : "hover:scale-105"}`}
-            style={{ background: isListening ? "linear-gradient(135deg, #ef4444, #dc2626)" : "var(--gradient-brand)" }}>
-            {isListening && <span className="absolute inset-0 rounded-full animate-ping opacity-30" style={{ background: "var(--gradient-brand)" }} />}
-            {isListening ? <MicOff className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
-          </button>
-          <p className="text-[11px] text-muted-foreground">{isListening ? "Tap to stop" : "Tap to speak or type below"}</p>
-        </div>
-
-        {/* Text input for typing queries */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Ask about speakers, schedule, directions..."
-            className="flex-1 text-sm px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && transcript.trim()) submitQuery(transcript.trim()); }}
-          />
-          <Button size="sm" onClick={() => transcript.trim() && submitQuery(transcript.trim())}
-            disabled={!transcript.trim() || isProcessing}
-            style={{ background: "var(--gradient-brand)", border: "none" }}>
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Response area */}
-        <div className="flex-1 space-y-3">
-          {isProcessing && (
-            <div className="rounded-xl bg-muted p-3 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Researching your query...</p>
-            </div>
-          )}
-          {aiResponse && !isProcessing && (
-            <div className="rounded-xl border p-3" style={{ background: "var(--gradient-brand-subtle)" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-wide mb-1 gradient-text">EventHub AI</p>
-              <p className="text-sm text-foreground whitespace-pre-wrap">{aiResponse}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Example prompts */}
-        <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Try asking:</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {VOICE_EXAMPLES.map((ex) => (
-              <button key={ex} onClick={() => submitQuery(ex)}
-                className="text-left text-xs px-2.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:bg-primary/5 transition-all duration-150 text-muted-foreground hover:text-foreground">
-                "{ex}"
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Module 4: Digital Name Cards + Social Networking ────────────────────────
-
-function NetworkPanel() {
-  const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredAttendees = useMemo(() => {
-    if (!searchQuery) return DEMO_ATTENDEES;
-    const q = searchQuery.toLowerCase();
-    return DEMO_ATTENDEES.filter(a =>
-      a.name.toLowerCase().includes(q) ||
-      a.role.toLowerCase().includes(q) ||
-      a.skills.some(s => s.toLowerCase().includes(q)) ||
-      a.industry.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Digital Name Cards</span>
-        </div>
-        <Badge variant="secondary" className="text-xs">{DEMO_ATTENDEES.length} attendees</Badge>
-      </div>
-
-      {/* Search */}
-      <div className="px-3 py-2 border-b border-border/50">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <input type="text" placeholder="Search by name, role, skill, or industry..."
-            className="w-full text-xs pl-8 pr-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:border-primary/50"
-            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1">
-        <div className="p-3 space-y-2">
-          {filteredAttendees.map((person) => (
-            <div key={person.name}
-              onClick={() => setExpandedCard(expandedCard === person.name ? null : person.name)}
-              className={`rounded-xl border p-3 transition-all duration-200 cursor-pointer hover:shadow-md ${expandedCard === person.name ? "border-primary/30 bg-primary/[0.02] shadow-md" : "border-border bg-white hover:border-primary/20"}`}>
-              {/* Card header */}
-              <div className="flex items-center gap-3">
-                <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${person.color} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
-                  {person.avatar}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{person.name}</p>
-                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                    <Briefcase className="w-3 h-3" />{person.role}
-                  </p>
-                </div>
-                <div className="flex gap-1.5">
-                  <a href={`https://linkedin.com/in/${person.linkedin}`} target="_blank" rel="noopener noreferrer"
-                    className="w-7 h-7 rounded-lg bg-[#0077B5]/10 hover:bg-[#0077B5]/20 flex items-center justify-center transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
-                    <Linkedin className="w-3.5 h-3.5 text-[#0077B5]" />
-                  </a>
-                  <a href={`https://instagram.com/${person.instagram}`} target="_blank" rel="noopener noreferrer"
-                    className="w-7 h-7 rounded-lg bg-pink-50 hover:bg-pink-100 flex items-center justify-center transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
-                    <Instagram className="w-3.5 h-3.5 text-pink-500" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Expanded card details */}
-              {expandedCard === person.name && (
-                <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Building2 className="w-3 h-3" />
-                    <span>{person.company} · {person.industry}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {person.skills.map(skill => (
-                      <span key={skill} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{skill}</span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <a href={`https://linkedin.com/in/${person.linkedin}`} target="_blank" rel="noopener noreferrer"
-                      className="flex-1 text-center text-[11px] font-semibold py-1.5 rounded-lg bg-[#0077B5] text-white hover:bg-[#005885] transition-colors"
-                      onClick={(e) => e.stopPropagation()}>
-                      Connect on LinkedIn
-                    </a>
-                    <button className="flex-1 text-center text-[11px] font-semibold py-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
-                      onClick={(e) => { e.stopPropagation(); toast.success(`Message request sent to ${person.name}`); }}>
-                      Send Message
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
-
-// ─── Module 5: Check-in Flow ─────────────────────────────────────────────────
-
-function CheckInPanel() {
-  const [step, setStep] = useState<CheckInStep>("arrival");
-  const [confirmed, setConfirmed] = useState(false);
-
-  const steps: { key: CheckInStep; label: string }[] = [
-    { key: "arrival", label: "Arrival" },
-    { key: "wifi", label: "WiFi" },
-    { key: "table", label: "Table" },
-    { key: "timeline", label: "Schedule" },
-  ];
-
-  const stepIndex = steps.findIndex(s => s.key === step);
-
-  const confirmArrival = () => {
-    setConfirmed(true);
-    setTimeout(() => setStep("wifi"), 800);
-    toast.success("Welcome to TechSummit 2026!");
+  const handleSend = () => {
+    if (!inputText.trim()) return;
+    processMessage(inputText.trim());
+    setInputText("");
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <UserCheck className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Check-In</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {steps.map((s, i) => (
-            <button key={s.key} onClick={() => (i <= stepIndex || confirmed) ? setStep(s.key) : null}
-              className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-all duration-200 ${s.key === step ? "text-white scale-110" : i < stepIndex ? "bg-green-100 text-green-600" : "bg-muted text-muted-foreground"}`}
-              style={s.key === step ? { background: "var(--gradient-brand)" } : {}}>
-              {i < stepIndex ? <CheckCircle2 className="w-3 h-3" /> : i + 1}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-4">
-        {step === "arrival" && (
-          <div className="flex flex-col items-center justify-center h-full gap-5 text-center">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "var(--gradient-brand-subtle)" }}>
-              <UserCheck className="w-8 h-8 text-primary" />
+    <div className="h-full flex flex-col">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-3 pb-4">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-slide-up`}>
+            <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed ${
+              msg.role === "user"
+                ? "bg-primary text-white rounded-br-md"
+                : "glass-card rounded-bl-md"
+            }`}>
+              {msg.text.split("\n").map((line, j) => <p key={j} className={j > 0 ? "mt-1" : ""}>{line}</p>)}
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-foreground mb-1">Welcome to TechSummit 2026</h3>
-              <p className="text-sm text-muted-foreground">Confirm your arrival to unlock WiFi, table assignment, and the full event schedule.</p>
-            </div>
-            <Button onClick={confirmArrival} className="w-full gap-2" style={{ background: "var(--gradient-brand)", border: "none" }} disabled={confirmed}>
-              {confirmed ? <><CheckCircle2 className="w-4 h-4" /> Confirmed!</> : <><CheckCircle2 className="w-4 h-4" /> Confirm My Arrival</>}
-            </Button>
-          </div>
-        )}
-
-        {step === "wifi" && (
-          <div className="flex flex-col gap-4">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: "var(--gradient-brand-subtle)" }}>
-                <Wifi className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-base font-bold mb-1">WiFi Access</h3>
-              <p className="text-xs text-muted-foreground">Connect to the event network</p>
-            </div>
-            <div className="rounded-xl border p-4 space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Network Name (SSID)</p>
-                <div className="flex items-center justify-between bg-muted rounded-lg px-3 py-2">
-                  <span className="text-sm font-mono font-semibold">{DEMO_EVENT.wifiSsid}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(DEMO_EVENT.wifiSsid); toast.success("SSID copied!"); }}
-                    className="text-xs text-primary hover:underline">Copy</button>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Password</p>
-                <div className="flex items-center justify-between bg-muted rounded-lg px-3 py-2">
-                  <span className="text-sm font-mono font-semibold">{DEMO_EVENT.wifiPassword}</span>
-                  <button onClick={() => { navigator.clipboard.writeText(DEMO_EVENT.wifiPassword); toast.success("Password copied!"); }}
-                    className="text-xs text-primary hover:underline">Copy</button>
-                </div>
-              </div>
-            </div>
-            <Button onClick={() => setStep("table")} className="w-full gap-2" style={{ background: "var(--gradient-brand)", border: "none" }}>
-              Next: My Table <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-
-        {step === "table" && (
-          <div className="flex flex-col gap-4">
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: "var(--gradient-brand-subtle)" }}>
-                <TableProperties className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-base font-bold mb-1">Your Table Assignment</h3>
-            </div>
-            <div className="rounded-2xl border-2 border-primary/30 p-6 text-center" style={{ background: "var(--gradient-brand-subtle)" }}>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Table Number</p>
-              <p className="text-6xl font-black gradient-text" style={{ fontFamily: "'Syne', sans-serif" }}>A3</p>
-              <p className="text-xs text-muted-foreground mt-2">Section A · Near the main stage</p>
-            </div>
-            <Button onClick={() => setStep("timeline")} className="w-full gap-2" style={{ background: "var(--gradient-brand)", border: "none" }}>
-              View Schedule <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-
-        {step === "timeline" && (
-          <div className="flex flex-col gap-3">
-            <div className="text-center mb-1">
-              <h3 className="text-base font-bold">Event Timeline</h3>
-              <p className="text-xs text-muted-foreground">TechSummit 2026 · June 12</p>
-            </div>
-            <div className="relative">
-              <div className="absolute left-[18px] top-0 bottom-0 w-px bg-border" />
-              <div className="space-y-1">
-                {DEMO_TIMELINE.map((item, i) => (
-                  <div key={i} className={`relative flex gap-3 pl-10 py-2.5 rounded-xl transition-all ${item.active ? "bg-primary/5 border border-primary/20" : item.done ? "opacity-60" : ""}`}>
-                    <div className={`absolute left-3 top-3 w-4 h-4 rounded-full border-2 flex items-center justify-center ${item.active ? "border-primary bg-primary" : item.done ? "border-green-500 bg-green-500" : "border-border bg-white"}`}>
-                      {(item.active || item.done) && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono text-muted-foreground">{item.time}</span>
-                        {item.active && <Badge className="text-[9px] h-4 px-1.5 bg-primary/10 text-primary border-primary/30">Now</Badge>}
-                      </div>
-                      <p className={`text-xs font-semibold ${item.active ? "text-primary" : "text-foreground"}`}>{item.title}</p>
-                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-2.5 h-2.5" />{item.location}
-                        {item.speaker && <> · <GraduationCap className="w-2.5 h-2.5" />{item.speaker}</>}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Module 6: Commute Planner ───────────────────────────────────────────────
-
-function CommutePanel() {
-  const [commuteResults, setCommuteResults] = useState<Array<{ from: string; to: string; driving: string; transit: string; distance: string; feasible: boolean }>>([]);
-  const [loading, setLoading] = useState(false);
-
-  const calculateCommutes = () => {
-    setLoading(true);
-    // Use Google Maps client-side DirectionsService for commute calculation
-    const pairs = [
-      { from: DEMO_EVENTS[0], to: DEMO_EVENTS[1] },
-      { from: DEMO_EVENTS[1], to: DEMO_EVENTS[2] },
-      { from: DEMO_EVENTS[0], to: DEMO_EVENTS[3] },
-    ];
-
-    const results: typeof commuteResults = [];
-    let completed = 0;
-
-    pairs.forEach((pair) => {
-      const service = new google.maps.DirectionsService();
-      // Driving
-      service.route(
-        { origin: pair.from.venueAddress, destination: pair.to.venueAddress, travelMode: google.maps.TravelMode.DRIVING },
-        (drivingResult, drivingStatus) => {
-          const drivingDuration = drivingStatus === "OK" ? drivingResult?.routes[0]?.legs[0]?.duration?.text ?? "N/A" : "N/A";
-          const distance = drivingStatus === "OK" ? drivingResult?.routes[0]?.legs[0]?.distance?.text ?? "N/A" : "N/A";
-
-          // Transit
-          service.route(
-            { origin: pair.from.venueAddress, destination: pair.to.venueAddress, travelMode: google.maps.TravelMode.TRANSIT },
-            (transitResult, transitStatus) => {
-              const transitDuration = transitStatus === "OK" ? transitResult?.routes[0]?.legs[0]?.duration?.text ?? "N/A" : "N/A";
-              const drivingMins = parseInt(drivingDuration) || 30;
-              results.push({
-                from: pair.from.title,
-                to: pair.to.title,
-                driving: drivingDuration,
-                transit: transitDuration,
-                distance,
-                feasible: drivingMins <= 30,
-              });
-              completed++;
-              if (completed === pairs.length) {
-                setCommuteResults(results);
-                setLoading(false);
-              }
-            }
-          );
-        }
-      );
-    });
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <Route className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Commute Planner</span>
-        </div>
-        <Button size="sm" className="h-7 text-xs gap-1" onClick={calculateCommutes} disabled={loading}
-          style={{ background: "var(--gradient-brand)", border: "none" }}>
-          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Timer className="w-3 h-3" />}
-          {loading ? "Calculating..." : "Calculate Routes"}
-        </Button>
-      </div>
-
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
-          {/* Info banner */}
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-            <p className="text-xs font-semibold text-primary mb-1">Plan Your Event Hopping</p>
-            <p className="text-[11px] text-muted-foreground">Calculate travel time between events to decide which sessions to attend. Supports driving and public transit (MRT/Bus) routes in Singapore.</p>
-          </div>
-
-          {/* Event list for reference */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground">Your RSVP'd Events</p>
-            {DEMO_EVENTS.map((ev) => (
-              <div key={ev.id} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-white">
-                <MapPin className="w-3 h-3 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{ev.title}</p>
-                  <p className="text-[10px] text-muted-foreground">{ev.venue} · {ev.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Results */}
-          {commuteResults.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-foreground">Travel Times Between Events</p>
-              {commuteResults.map((route, i) => (
-                <div key={i} className={`rounded-xl border p-3 ${route.feasible ? "border-green-200 bg-green-50/50" : "border-amber-200 bg-amber-50/50"}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-semibold text-foreground">{route.from}</span>
-                    <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-foreground">{route.to}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Car className="w-3 h-3 text-blue-600" />
-                      <span className="text-[11px] text-foreground font-medium">{route.driving}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Bus className="w-3 h-3 text-green-600" />
-                      <span className="text-[11px] text-foreground font-medium">{route.transit}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Globe className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-[11px] text-muted-foreground">{route.distance}</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    {route.feasible ? (
-                      <><ThumbsUp className="w-3 h-3 text-green-600" /><span className="text-[10px] text-green-700 font-medium">Feasible — you can make both events</span></>
-                    ) : (
-                      <><AlertTriangle className="w-3 h-3 text-amber-600" /><span className="text-[10px] text-amber-700 font-medium">Tight schedule — consider prioritizing one</span></>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {commuteResults.length === 0 && !loading && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Route className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="text-xs">Click "Calculate Routes" to see travel times between your events</p>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
-
-// ─── Module 7: Smart Suggestions (LinkedIn-powered) ──────────────────────────
-
-function SuggestPanel() {
-  const [activeSubTab, setActiveSubTab] = useState<"people" | "events">("people");
-
-  // Compute relevance scores for people suggestions
-  const peopleSuggestions = useMemo(() => {
-    return DEMO_ATTENDEES
-      .map(person => ({
-        ...person,
-        score: computeRelevanceScore(CURRENT_USER.skills, CURRENT_USER.industry, person.skills, person.industry),
-        matchReason: person.industry === CURRENT_USER.industry
-          ? `Same industry (${person.industry})`
-          : person.skills.find(s => CURRENT_USER.skills.map(x => x.toLowerCase()).includes(s.toLowerCase()))
-            ? `Shared skill: ${person.skills.find(s => CURRENT_USER.skills.map(x => x.toLowerCase()).includes(s.toLowerCase()))}`
-            : "Complementary expertise",
-      }))
-      .sort((a, b) => b.score - a.score);
-  }, []);
-
-  // Compute event suggestions based on user interests
-  const eventSuggestions = useMemo(() => {
-    return DEMO_EVENTS
-      .filter(ev => ev.id !== 1) // Exclude current event
-      .map(ev => ({
-        ...ev,
-        score: ev.tags.filter(t => CURRENT_USER.interests.map(i => i.toLowerCase()).includes(t.toLowerCase()) || CURRENT_USER.skills.map(s => s.toLowerCase()).includes(t.toLowerCase())).length * 30,
-        matchReason: ev.tags.filter(t => CURRENT_USER.interests.map(i => i.toLowerCase()).includes(t.toLowerCase()) || CURRENT_USER.skills.map(s => s.toLowerCase()).includes(t.toLowerCase())).join(", ") || "Expand your network",
-      }))
-      .sort((a, b) => b.score - a.score);
-  }, []);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold">Smart Suggestions</span>
-        </div>
-        <Badge variant="secondary" className="text-[10px] gap-1"><Linkedin className="w-2.5 h-2.5" />LinkedIn-powered</Badge>
-      </div>
-
-      {/* User profile summary */}
-      <div className="px-4 py-2.5 border-b border-border/50 bg-primary/[0.02]">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center text-white text-xs font-bold">AJ</div>
-          <div>
-            <p className="text-xs font-semibold">{CURRENT_USER.name}</p>
-            <p className="text-[10px] text-muted-foreground">{CURRENT_USER.role}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-1 mt-2">
-          {CURRENT_USER.skills.map(s => (
-            <span key={s} className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{s}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Sub-tabs */}
-      <div className="flex border-b border-border/50">
-        <button onClick={() => setActiveSubTab("people")}
-          className={`flex-1 py-2 text-xs font-semibold text-center transition-all ${activeSubTab === "people" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"}`}>
-          <Users className="w-3 h-3 inline mr-1" />People to Meet
-        </button>
-        <button onClick={() => setActiveSubTab("events")}
-          className={`flex-1 py-2 text-xs font-semibold text-center transition-all ${activeSubTab === "events" ? "text-primary border-b-2 border-primary" : "text-muted-foreground"}`}>
-          <Calendar className="w-3 h-3 inline mr-1" />Events for You
-        </button>
-      </div>
-
-      <ScrollArea className="flex-1">
-        {activeSubTab === "people" && (
-          <div className="p-3 space-y-2">
-            {peopleSuggestions.map((person) => (
-              <div key={person.name} className="rounded-xl border border-border bg-white p-3 hover:shadow-md hover:border-primary/20 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${person.color} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
-                    {person.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold truncate">{person.name}</p>
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5">{person.score}% match</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{person.role}</p>
-                  </div>
-                  <a href={`https://linkedin.com/in/${person.linkedin}`} target="_blank" rel="noopener noreferrer"
-                    className="w-8 h-8 rounded-lg bg-[#0077B5]/10 hover:bg-[#0077B5]/20 flex items-center justify-center transition-colors">
-                    <ExternalLink className="w-3.5 h-3.5 text-[#0077B5]" />
-                  </a>
-                </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span className="text-[10px] text-amber-700 font-medium">{person.matchReason}</span>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {person.skills.map(s => (
-                    <span key={s} className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${CURRENT_USER.skills.map(x => x.toLowerCase()).includes(s.toLowerCase()) ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>{s}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeSubTab === "events" && (
-          <div className="p-3 space-y-2">
-            {eventSuggestions.map((ev) => (
-              <div key={ev.id} className="rounded-xl border border-border bg-white p-3 hover:shadow-md hover:border-primary/20 transition-all">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <h3 className="text-sm font-semibold">{ev.title}</h3>
-                    <p className="text-xs text-muted-foreground">{ev.venue}</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-2 py-0.5 shrink-0">{ev.score}% relevant</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                  <Clock className="w-3 h-3" /><span>{ev.time}</span>
-                  <Users className="w-3 h-3 ml-2" /><span>{ev.attendees} attending</span>
-                </div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span className="text-[10px] text-amber-700 font-medium">Matches: {ev.matchReason}</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {ev.tags.map(tag => (
-                    <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${CURRENT_USER.interests.map(i => i.toLowerCase()).includes(tag.toLowerCase()) || CURRENT_USER.skills.map(s => s.toLowerCase()).includes(tag.toLowerCase()) ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>{tag}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
-    </div>
-  );
-}
-
-// ─── Module 8: Organizer Dashboard ───────────────────────────────────────────
-
-function OrganizerDashboard() {
-  const [liveCount, setLiveCount] = useState(DEMO_CHECKIN_LIST.filter(a => a.status === "checked_in").length);
-  const [requests, setRequests] = useState(DEMO_VOICE_REQUESTS);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveCount(prev => Math.min(prev + 1, DEMO_CHECKIN_LIST.length));
-    }, 8000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const resolveRequest = (idx: number) => {
-    setRequests(prev => prev.map((r, i) => i === idx ? { ...r, status: "answered" } : r));
-    toast.success("Request marked as resolved.");
-  };
-
-  const intentColor: Record<string, string> = {
-    navigation: "bg-blue-50 text-blue-700 border-blue-200",
-    service_request: "bg-amber-50 text-amber-700 border-amber-200",
-    informational: "bg-green-50 text-green-700 border-green-200",
-    speaker_research: "bg-purple-50 text-purple-700 border-purple-200",
-    other: "bg-muted text-muted-foreground border-border",
-  };
-
-  const statusColor: Record<string, string> = {
-    answered: "text-green-600",
-    pending: "text-amber-600",
-    escalated: "text-red-600",
-  };
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-0 border-b border-border/50">
-        {[
-          { label: "Checked In", value: liveCount, icon: UserCheck, color: "text-green-600" },
-          { label: "Total RSVP", value: DEMO_EVENT.rsvpCount, icon: Users, color: "text-primary" },
-          { label: "Pending", value: DEMO_CHECKIN_LIST.filter(a => a.status === "pending").length, icon: Clock, color: "text-amber-600" },
-          { label: "Requests", value: requests.filter(r => r.status === "pending").length, icon: MessageSquare, color: "text-red-600" },
-        ].map((stat) => (
-          <div key={stat.label} className="flex flex-col items-center py-3 px-2 border-r border-border/50 last:border-r-0">
-            <stat.icon className={`w-4 h-4 mb-1 ${stat.color}`} />
-            <span className={`text-lg font-black ${stat.color}`} style={{ fontFamily: "'Syne', sans-serif" }}>{stat.value}</span>
-            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{stat.label}</span>
           </div>
         ))}
+        {transcript && (
+          <div className="flex justify-end animate-fade-in">
+            <div className="max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs bg-primary/10 text-primary rounded-br-md italic">
+              {transcript}...
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Attendance Map */}
-        <div className="flex flex-col w-1/2 border-r border-border/50">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
-            <Activity className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold">Live Attendance Map</span>
-            <span className="ml-auto flex items-center gap-1 text-[10px] text-green-600">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
-            </span>
-          </div>
-          <div className="flex-1 relative">
-            <MapView
-              className="w-full h-full"
-              initialCenter={{ lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng }}
-              initialZoom={16}
-              onMapReady={(map) => {
-                new google.maps.marker.AdvancedMarkerElement({ map, position: { lat: DEMO_EVENT.venueLat, lng: DEMO_EVENT.venueLng }, title: "Venue" });
-                const offsets = [[0.0003, 0.0002], [-0.0002, 0.0004], [0.0005, -0.0001], [-0.0004, -0.0003], [0.0001, 0.0005], [0.0006, 0.0003]];
-                offsets.forEach(([dlat, dlng]) => {
-                  new google.maps.marker.AdvancedMarkerElement({ map, position: { lat: DEMO_EVENT.venueLat + dlat, lng: DEMO_EVENT.venueLng + dlng } });
-                });
-              }}
+      {/* Input Area */}
+      <div className="shrink-0 px-4 py-3 glass-heavy border-t border-border/30">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={isListening ? stopListening : startListening}
+            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 ${
+              isListening ? "bg-red-500 text-white animate-pulse" : "bg-primary text-white"
+            }`}
+          >
+            <Mic className="w-4.5 h-4.5" />
+          </button>
+          <div className="flex-1 flex items-center gap-2 glass rounded-full px-3.5 py-2">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              placeholder="Ask anything..."
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             />
+            <button onClick={handleSend} className="text-primary hover:text-primary/80 transition-colors">
+              <Send className="w-4 h-4" />
+            </button>
           </div>
+          {/* WhatsApp direct */}
+          <button
+            onClick={() => {
+              const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent("[Find your Space] I need help from the organizer")}`;
+              window.open(waUrl, "_blank");
+              toast.success("Opening WhatsApp to contact organizer...");
+            }}
+            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-green-500 text-white active:scale-90 transition-transform"
+          >
+            <Phone className="w-4.5 h-4.5" />
+          </button>
         </div>
-
-        {/* Right: Check-in list + Voice requests */}
-        <div className="flex flex-col w-1/2 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
-            <UserCheck className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold">Check-in List</span>
-          </div>
-          <ScrollArea className="h-[40%] border-b border-border/50">
-            <div className="p-2 space-y-1">
-              {DEMO_CHECKIN_LIST.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${a.status === "checked_in" ? "bg-green-500" : "bg-amber-400"}`} />
-                  <span className="text-xs font-medium flex-1 truncate">{a.name}</span>
-                  <span className="text-[10px] text-muted-foreground font-mono">T:{a.table}</span>
-                  <span className="text-[10px] text-muted-foreground">{a.time}</span>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
-            <MessageSquare className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold">Voice / Chat Requests</span>
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-2">
-              {requests.map((req, i) => (
-                <div key={i} className={`rounded-lg border p-2.5 transition-all ${req.status === "escalated" ? "border-red-200 bg-red-50/50" : req.status === "pending" ? "border-amber-200 bg-amber-50/50" : "border-border bg-white"}`}>
-                  <div className="flex items-start justify-between gap-1 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold">{req.name}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono">T:{req.table}</span>
-                    </div>
-                    <span className={`text-[10px] border rounded-full px-1.5 py-0.5 ${intentColor[req.intent] ?? intentColor.other}`}>{req.intent.replace("_", " ")}</span>
-                  </div>
-                  <p className="text-xs text-foreground mb-1.5">"{req.query}"</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">{req.time}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] font-medium ${statusColor[req.status] ?? ""}`}>{req.status}</span>
-                      {req.status === "pending" && (
-                        <button onClick={() => resolveRequest(i)} className="text-[10px] text-primary hover:underline font-medium">Resolve</button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
+        <p className="text-[9px] text-muted-foreground text-center mt-2">Tap mic to speak · Green button for WhatsApp to organizer</p>
       </div>
     </div>
   );
 }
 
-// ─── Tab Navigation ──────────────────────────────────────────────────────────
+// ─── Network Panel ──────────────────────────────────────────────────────────────
 
-const ATTENDEE_TABS: { key: AttendeeTab; label: string; icon: React.ElementType }[] = [
-  { key: "map", label: "Map", icon: MapPin },
-  { key: "events", label: "Events", icon: Calendar },
-  { key: "voice", label: "AI", icon: Brain },
-  { key: "network", label: "Network", icon: Users },
-  { key: "commute", label: "Commute", icon: Route },
-  { key: "suggest", label: "For You", icon: Sparkles },
-  { key: "checkin", label: "Check-In", icon: UserCheck },
-];
+function NetworkPanel() {
+  const [filter, setFilter] = useState<"all" | "suggested">("all");
 
-// ─── Main Platform ───────────────────────────────────────────────────────────
+  const suggestions = useMemo(() => {
+    return DEMO_ATTENDEES.map(a => ({
+      ...a,
+      score: Math.floor(Math.random() * 30) + 70,
+      reason: a.industry === "Technology" ? "Same industry, complementary skills" :
+              a.industry === "AI" ? "Shared interest in AI/ML" :
+              "Potential collaboration opportunity"
+    })).sort((a, b) => b.score - a.score);
+  }, []);
 
-export default function EventPlatform() {
-  const [viewMode, setViewMode] = useState<ViewMode>("attendee");
-  const [activeTab, setActiveTab] = useState<AttendeeTab>("map");
+  const displayList = filter === "suggested" ? suggestions : DEMO_ATTENDEES;
 
   return (
-    <div className="relative min-h-screen bg-background flex flex-col overflow-hidden">
-      <BackgroundDecoration />
-      <PlatformHeader viewMode={viewMode} setViewMode={setViewMode} />
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-4 space-y-3 pb-24">
+      {/* Filter */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setFilter("all")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-all ${filter === "all" ? "bg-primary text-white" : "glass"}`}
+        >
+          All People
+        </button>
+        <button
+          onClick={() => setFilter("suggested")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${filter === "suggested" ? "bg-primary text-white" : "glass"}`}
+        >
+          <Sparkles className="w-3 h-3" />For You
+        </button>
+      </div>
 
-      <main className="relative z-10 flex-1 flex flex-col overflow-hidden" style={{ height: "calc(100vh - 65px)" }}>
-        {viewMode === "attendee" ? (
-          <div className="flex flex-col h-full">
-            {/* Hero strip */}
-            <div className="px-6 py-3 border-b border-border/50 bg-white/60 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-black gradient-text" style={{ fontFamily: "'Syne', sans-serif" }}>
-                    TechSummit 2026
-                  </h2>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <MapPin className="w-3 h-3" /> Marina Bay Sands Expo · Today, 9:00 AM – 6:00 PM
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Users className="w-3 h-3 text-primary" /> {DEMO_EVENT.attendeeCount} here</span>
-                  <span className="flex items-center gap-1"><Star className="w-3 h-3 text-amber-500" /> {DEMO_EVENT.rsvpCount} RSVPs</span>
-                </div>
+      {/* People Cards */}
+      {displayList.map((person, i) => (
+        <div key={person.id} className="glass-card p-4 animate-slide-up" style={{ animationDelay: `${i * 50}ms` }}>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
+              <span className="text-sm font-semibold text-primary">{person.name[0]}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold truncate">{person.name}</p>
+                {filter === "suggested" && "score" in person && (
+                  <span className="pill text-[9px] text-primary bg-primary/5 border-primary/20">
+                    {(person as any).score}% match
+                  </span>
+                )}
               </div>
-            </div>
-
-            {/* Tab navigation */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-border/50 bg-white/60 backdrop-blur-sm overflow-x-auto">
-              {ATTENDEE_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200 ${activeTab === tab.key ? "tab-active shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
-                  <tab.icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Panel content */}
-            <div className="flex-1 overflow-hidden">
-              <div className={`h-full ${activeTab === "map" ? "block" : "hidden"}`}><MapsPanel /></div>
-              <div className={`h-full ${activeTab === "events" ? "block" : "hidden"}`}><EventFeedPanel /></div>
-              <div className={`h-full ${activeTab === "voice" ? "block" : "hidden"}`}><VoicePanel /></div>
-              <div className={`h-full ${activeTab === "network" ? "block" : "hidden"}`}><NetworkPanel /></div>
-              <div className={`h-full ${activeTab === "commute" ? "block" : "hidden"}`}><CommutePanel /></div>
-              <div className={`h-full ${activeTab === "suggest" ? "block" : "hidden"}`}><SuggestPanel /></div>
-              <div className={`h-full ${activeTab === "checkin" ? "block" : "hidden"}`}><CheckInPanel /></div>
+              <p className="text-[11px] text-muted-foreground">{person.role} · {person.company}</p>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {person.skills.map(s => (
+                  <span key={s} className="text-[9px] bg-muted px-1.5 py-0.5 rounded-md">{s}</span>
+                ))}
+              </div>
+              {filter === "suggested" && "reason" in person && (
+                <p className="text-[10px] text-primary/80 mt-1.5 italic">{(person as any).reason}</p>
+              )}
+              <div className="flex items-center gap-2 mt-2.5">
+                {person.linkedin && (
+                  <a href={`https://${person.linkedin}`} target="_blank" rel="noopener" className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                    LinkedIn <ChevronRight className="w-2.5 h-2.5" />
+                  </a>
+                )}
+                {person.instagram && (
+                  <a href={`https://instagram.com/${person.instagram.replace("@", "")}`} target="_blank" rel="noopener" className="text-[10px] text-pink-600 hover:underline flex items-center gap-0.5">
+                    Instagram <ChevronRight className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-        ) : (
-          /* Organizer Dashboard */
-          <div className="flex flex-col h-full">
-            <div className="px-6 py-3 border-b border-border/50 bg-white/60 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-black gradient-text" style={{ fontFamily: "'Syne', sans-serif" }}>
-                    Organizer Dashboard
-                  </h2>
-                  <p className="text-xs text-muted-foreground">TechSummit 2026 · Real-time monitoring</p>
-                </div>
-                <Badge className="text-xs gap-1 bg-green-50 text-green-700 border-green-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live Data
-                </Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Check-In Panel ─────────────────────────────────────────────────────────────
+
+function CheckInPanel() {
+  const [step, setStep] = useState(0); // 0=not checked in, 1=wifi, 2=table, 3=timeline
+
+  const handleCheckIn = () => {
+    toast.success("Welcome! You're checked in.");
+    setStep(1);
+  };
+
+  return (
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-6 pb-24">
+      <div className="max-w-sm mx-auto space-y-4">
+        {/* Progress */}
+        <div className="flex items-center gap-1 justify-center mb-6">
+          {[0, 1, 2, 3].map(s => (
+            <div key={s} className={`h-1 rounded-full transition-all duration-300 ${s <= step ? "w-8" : "w-4"}`}
+              style={{ background: s <= step ? "var(--gradient-brand)" : "var(--color-border)" }} />
+          ))}
+        </div>
+
+        {/* Step 0: Check In */}
+        {step === 0 && (
+          <div className="glass-card p-6 text-center animate-slide-up">
+            <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: "var(--gradient-brand)" }}>
+              <CheckCircle2 className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold">Confirm Arrival</h3>
+            <p className="text-xs text-muted-foreground mt-1">Tap below to check in to {DEMO_EVENT.title}</p>
+            <Button onClick={handleCheckIn} className="mt-5 w-full h-11 rounded-full text-sm font-medium" style={{ background: "var(--gradient-brand)" }}>
+              I'm Here
+            </Button>
+          </div>
+        )}
+
+        {/* Step 1: WiFi */}
+        {step >= 1 && (
+          <div className="glass-card p-5 animate-slide-up">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                <Wifi className="w-4.5 h-4.5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">WiFi Access</p>
+                <p className="text-[10px] text-muted-foreground">Connect to the event network</p>
               </div>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <OrganizerDashboard />
+            <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Network</span>
+                <span className="text-xs font-medium">{DEMO_EVENT.wifiSsid}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Password</span>
+                <button onClick={() => { navigator.clipboard.writeText(DEMO_EVENT.wifiPassword); toast.success("Copied!"); }}
+                  className="text-xs font-mono font-medium text-primary hover:underline">{DEMO_EVENT.wifiPassword}</button>
+              </div>
+            </div>
+            {step === 1 && (
+              <Button onClick={() => setStep(2)} variant="outline" className="mt-3 w-full h-9 text-[11px] rounded-full">
+                Next: Your Table <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Step 2: Table */}
+        {step >= 2 && (
+          <div className="glass-card p-5 animate-slide-up">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+                <Hash className="w-4.5 h-4.5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Your Table</p>
+                <p className="text-[10px] text-muted-foreground">Main Hall, left side</p>
+              </div>
+            </div>
+            <div className="text-center py-3">
+              <span className="text-4xl font-bold gradient-text">12</span>
+              <p className="text-[10px] text-muted-foreground mt-1">Near the stage, row B</p>
+            </div>
+            {step === 2 && (
+              <Button onClick={() => setStep(3)} variant="outline" className="mt-3 w-full h-9 text-[11px] rounded-full">
+                Next: Today's Schedule <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Timeline */}
+        {step >= 3 && (
+          <div className="glass-card p-5 animate-slide-up">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                <Clock className="w-4.5 h-4.5 text-teal-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold">Event Timeline</p>
+                <p className="text-[10px] text-muted-foreground">Today's schedule</p>
+              </div>
+            </div>
+            <div className="space-y-2.5 mt-2">
+              {DEMO_SESSIONS.map((s) => (
+                <div key={s.id} className="flex items-start gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{
+                    background: s.status === "live" ? "oklch(0.55 0.22 150)" : s.status === "next" ? "oklch(0.65 0.18 80)" : "var(--color-border)"
+                  }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-medium truncate">{s.title}</p>
+                    <p className="text-[9px] text-muted-foreground">{s.time} · {s.location}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
-      </main>
+      </div>
+    </div>
+  );
+}
+
+// ─── Organizer: Dashboard ───────────────────────────────────────────────────────
+
+function OrganizerDashboard() {
+  return (
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-4 space-y-4 pb-24">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="glass-card p-3 text-center">
+          <p className="text-lg font-bold gradient-text">{DEMO_EVENT.checkedIn}</p>
+          <p className="text-[9px] text-muted-foreground">Checked In</p>
+        </div>
+        <div className="glass-card p-3 text-center">
+          <p className="text-lg font-bold">{DEMO_EVENT.totalRsvps}</p>
+          <p className="text-[9px] text-muted-foreground">Total RSVPs</p>
+        </div>
+        <div className="glass-card p-3 text-center">
+          <p className="text-lg font-bold text-amber-600">3</p>
+          <p className="text-[9px] text-muted-foreground">Pending</p>
+        </div>
+      </div>
+
+      {/* Attendance Rate */}
+      <div className="glass-card p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold">Attendance Rate</p>
+          <p className="text-xs font-bold gradient-text">{Math.round((DEMO_EVENT.checkedIn / DEMO_EVENT.totalRsvps) * 100)}%</p>
+        </div>
+        <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${(DEMO_EVENT.checkedIn / DEMO_EVENT.totalRsvps) * 100}%`, background: "var(--gradient-brand)" }} />
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="glass-card p-4">
+        <p className="text-xs font-semibold mb-3">Recent Activity</p>
+        <div className="space-y-2.5">
+          {DEMO_ATTENDEES.slice(0, 4).map((a, i) => (
+            <div key={a.id} className="flex items-center gap-2.5 animate-slide-up" style={{ animationDelay: `${i * 40}ms` }}>
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-[10px] font-semibold text-primary">{a.name[0]}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium truncate">{a.name}</p>
+                <p className="text-[9px] text-muted-foreground">{a.role} · Table {a.tableNumber}</p>
+              </div>
+              <span className="text-[9px] text-muted-foreground shrink-0">{a.checkedInAt}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* WhatsApp Status */}
+      <div className="glass-card p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+          <p className="text-xs font-semibold">WhatsApp Connector</p>
+          <span className="pill pill-live text-[9px] ml-auto">Active</span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Messages from attendees are forwarded to your WhatsApp. 3 messages received today.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Organizer: Check-In List ───────────────────────────────────────────────────
+
+function CheckInListPanel() {
+  return (
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-4 space-y-3 pb-24">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Check-In List</h2>
+        <span className="pill text-[10px]">{DEMO_ATTENDEES.length} total</span>
+      </div>
+      {DEMO_ATTENDEES.map((a, i) => (
+        <div key={a.id} className="glass-card p-3 flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${i * 40}ms` }}>
+          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <span className="text-xs font-semibold text-primary">{a.name[0]}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold truncate">{a.name}</p>
+            <p className="text-[10px] text-muted-foreground">{a.role} · {a.company}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[10px] font-medium">Table {a.tableNumber}</p>
+            <p className="text-[9px] text-muted-foreground">{a.checkedInAt}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Organizer: Requests Panel ──────────────────────────────────────────────────
+
+function RequestsPanel() {
+  const requests = [
+    { id: 1, from: "Sarah Chen", message: "The projector in Room 3B isn't working", time: "2:34 PM", status: "new" as const, table: 12 },
+    { id: 2, from: "Alex Kim", message: "Where is the lunch area?", time: "2:28 PM", status: "resolved" as const, table: 8 },
+    { id: 3, from: "Mike Torres", message: "Need extra chair at Table 5", time: "2:20 PM", status: "in_progress" as const, table: 5 },
+  ];
+
+  const statusBadge: Record<string, string> = {
+    new: "bg-red-50 text-red-700 border-red-200",
+    in_progress: "bg-amber-50 text-amber-700 border-amber-200",
+    resolved: "bg-green-50 text-green-700 border-green-200",
+  };
+
+  return (
+    <div className="h-full overflow-y-auto no-scrollbar px-4 py-4 space-y-3 pb-24">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Attendee Requests</h2>
+        <span className="pill text-[10px] bg-red-50 text-red-700 border-red-200">1 new</span>
+      </div>
+      {requests.map((req, i) => (
+        <div key={req.id} className="glass-card p-4 animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`pill text-[9px] ${statusBadge[req.status]}`}>
+                  {req.status === "new" ? "New" : req.status === "in_progress" ? "In Progress" : "Resolved"}
+                </span>
+                <span className="text-[9px] text-muted-foreground">{req.time}</span>
+              </div>
+              <p className="text-xs font-semibold">{req.from}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Table {req.table} · "{req.message}"</p>
+            </div>
+            {req.status === "new" && (
+              <button
+                onClick={() => {
+                  const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent(`Reply to ${req.from}: ${req.message}`)}`;
+                  window.open(waUrl, "_blank");
+                }}
+                className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform"
+              >
+                <Phone className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* WhatsApp forwarding info */}
+      <div className="glass-card p-3 bg-green-50/30 border-green-200/30">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+          <p className="text-[10px] text-green-800">All new requests are automatically forwarded to your WhatsApp</p>
+        </div>
+      </div>
     </div>
   );
 }
