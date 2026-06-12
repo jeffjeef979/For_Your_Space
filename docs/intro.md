@@ -5,9 +5,9 @@ sidebar_position: 1
 slug: /
 ---
 
-# Find your Space
+# EventFlow
 
-**Find your Space** is an all-in-one event experience platform that helps direct the traffic flow of people at events. It combines real-time maps, geolocation wayfinding, event feeds, voice interaction, social networking, attendee check-in, and an organizer dashboard into a single unified mobile-first application.
+**EventFlow** is an all-in-one event experience platform that helps direct the traffic flow of people at events. It combines real-time maps, geolocation wayfinding, event feeds, voice interaction, social networking, attendee check-in, and an organizer dashboard into a single unified mobile-first application.
 
 ## The Problem
 
@@ -15,7 +15,7 @@ Event organizers face a recurring challenge: attendees arrive confused about whe
 
 ## The Solution
 
-Find your Space solves this by providing:
+EventFlow solves this by providing:
 
 | For Attendees | For Organizers |
 |---|---|

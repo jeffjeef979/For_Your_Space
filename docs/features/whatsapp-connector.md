@@ -42,7 +42,7 @@ const response = await fetch(
       to: ORGANIZER_PHONE,
       type: 'text',
       text: {
-        body: `[Find your Space] ${attendeeName}: ${message}`
+        body: `[EventFlow] ${attendeeName}: ${message}`
       }
     })
   }
@@ -72,7 +72,7 @@ window.open(waLink, '_blank');
 Messages forwarded to the organizer include context:
 
 ```
-[Find your Space] 🎫 TechSummit 2026
+[EventFlow] 🎫 TechSummit 2026
 From: Sarah Chen (Table 12)
 Time: 2:34 PM
 

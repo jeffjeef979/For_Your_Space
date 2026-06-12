@@ -62,14 +62,14 @@
 - [x] Integrate with geolocation watchPosition for continuous tracking
 
 ## Phase 10: Major UI Redesign — iOS Liquid Glass + Phone-First + Rebrand
-- [x] Rebrand to "Find your Space" with updated slogan
+- [x] Rebrand to "EventFlow" with updated slogan
 - [x] Redesign with iOS Liquid Glass design language (frosted glass, blur, translucent layers, depth)
 - [x] Phone-first mobile-optimized layout with bottom navigation
 - [x] Luma-inspired event feed cards (clean, minimal chrome, elegant)
 - [x] Map as primary attendee view (full-screen map on load)
 - [x] Geo-triggered wayfinding: auto-show directions when attendee is near venue
 - [x] Post-registration WiFi password reveal flow
-- [x] Update page title and branding to "Find your Space" (in index.html and Login page)
+- [x] Update page title and branding to "EventFlow" (in index.html and Login page)
 
 ## Phase 11: WhatsApp Connector for Organizer Messaging
 - [x] Add WhatsApp messaging integration so attendee messages reach organizer on WhatsApp (via wa.me deep links)
@@ -89,3 +89,6 @@
 - [x] Attendee demo account shows mobile map-first view, check-in, wayfinding, networking
 - [x] Organizer demo account shows dashboard with attendance, requests, WhatsApp forwarding
 - [x] Role-based routing after login (attendee vs organizer view)
+
+## Phase 14: Rebrand to EventFlow
+- [x] Update all references from "Find your Space" to "EventFlow"

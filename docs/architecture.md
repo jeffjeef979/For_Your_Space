@@ -6,7 +6,7 @@ sidebar_position: 2
 
 # System Architecture
 
-Find your Space follows a full-stack serverless-ready architecture designed for real-time event experiences with minimal latency.
+EventFlow follows a full-stack serverless-ready architecture designed for real-time event experiences with minimal latency.
 
 ## High-Level Overview
 

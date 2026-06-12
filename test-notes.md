@@ -1,4 +1,4 @@
-# Browser Test Results - Find your Space
+# Browser Test Results - EventFlow
 
 ## All Tabs Working ✅
 - **Map tab**: Google Maps renders with venue marker, floating action buttons for directions and street view
@@ -17,7 +17,7 @@
 - Progress bar at top of check-in shows step progression
 
 ## Design ✅
-- "Find your Space" gradient brand title
+- "EventFlow" gradient brand title
 - iOS Liquid Glass frosted cards
 - Clean white background with subtle depth
 - Mobile-first layout optimized for phone

@@ -292,7 +292,7 @@ Answer the attendee's question concisely and helpfully. For speaker background q
         });
       }
       // Build the wa.me deep link (fallback approach — no WhatsApp Business API needed)
-      const encodedMsg = encodeURIComponent(`[Find your Space] ${input.attendeeName}: ${input.message}`);
+      const encodedMsg = encodeURIComponent(`[EventFlow] ${input.attendeeName}: ${input.message}`);
       const waUrl = `https://wa.me/${input.organizerPhone}?text=${encodedMsg}`;
       return { success: true, waUrl, method: "deep_link" };
     }),

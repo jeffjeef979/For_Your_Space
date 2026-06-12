@@ -6,7 +6,7 @@ sidebar_position: 5
 
 # Deployment Guide
 
-Find your Space is designed to deploy as a single Node.js process on Cloud Run or any container-based hosting platform.
+EventFlow is designed to deploy as a single Node.js process on Cloud Run or any container-based hosting platform.
 
 ## Prerequisites
 

@@ -39,7 +39,7 @@ export default function Login() {
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
         {/* Brand */}
         <div className="text-center space-y-2">
-          <h1 className="brand-title text-3xl">Find your Space</h1>
+          <h1 className="brand-title text-3xl">EventFlow</h1>
           <p className="text-muted-foreground text-sm">Navigate events effortlessly</p>
         </div>
 

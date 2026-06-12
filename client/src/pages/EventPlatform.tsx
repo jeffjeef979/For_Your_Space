@@ -117,7 +117,7 @@ export default function EventPlatform() {
       {/* Header */}
       <header className="glass-heavy px-4 py-3 flex items-center justify-between shrink-0 z-30 relative">
         <div className="flex items-center gap-2.5">
-          <h1 className="brand-title text-lg leading-none">Find your Space</h1>
+          <h1 className="brand-title text-lg leading-none">EventFlow</h1>
         </div>
         <div className="flex items-center gap-2">
           <span className="pill pill-live text-[10px]">
@@ -497,7 +497,7 @@ function AIPanel() {
       } else if (lower.includes("organizer") || lower.includes("help")) {
         response = "I've forwarded your message to the organizer via WhatsApp. They'll get back to you shortly!";
         // Trigger WhatsApp deep link
-        const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent(`[Find your Space] Attendee request: ${text}`)}`;
+        const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent(`[EventFlow] Attendee request: ${text}`)}`;
         window.open(waUrl, "_blank");
       } else {
         response = "I can help with directions, your table number, the schedule, speaker info, or connecting you with the organizer. What would you like to know?";
@@ -589,7 +589,7 @@ function AIPanel() {
           {/* WhatsApp direct */}
           <button
             onClick={() => {
-              const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent("[Find your Space] I need help from the organizer")}`;
+              const waUrl = `https://wa.me/${ORGANIZER_PHONE}?text=${encodeURIComponent("[EventFlow] I need help from the organizer")}`;
               window.open(waUrl, "_blank");
               toast.success("Opening WhatsApp to contact organizer...");
             }}

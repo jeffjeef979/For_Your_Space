@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # Design System — iOS Liquid Glass
 
-Find your Space uses an iOS Liquid Glass design language optimized for mobile phone viewports (375–430px). The aesthetic draws from iOS 18+ with frosted glass panels, translucent layers, and subtle depth.
+EventFlow uses an iOS Liquid Glass design language optimized for mobile phone viewports (375–430px). The aesthetic draws from iOS 18+ with frosted glass panels, translucent layers, and subtle depth.
 
 ## Design Principles
 

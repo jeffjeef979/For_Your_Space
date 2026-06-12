@@ -6,7 +6,7 @@ sidebar_position: 1
 
 # Features Overview
 
-Find your Space combines 10 core modules into a single-screen unified dashboard. Each module is accessible via bottom navigation (mobile) or tab bar (desktop) without full-page navigations.
+EventFlow combines 10 core modules into a single-screen unified dashboard. Each module is accessible via bottom navigation (mobile) or tab bar (desktop) without full-page navigations.
 
 ## Module Map
 

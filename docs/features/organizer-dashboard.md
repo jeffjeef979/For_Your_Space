@@ -34,7 +34,7 @@ Requests that require immediate attention are automatically forwarded to the org
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Find your Space — Organizer Dashboard              │
+│  EventFlow — Organizer Dashboard              │
 │  TechSummit 2026 · 342/400 checked in              │
 ├─────────────────────────┬───────────────────────────┤
 │                         │  Recent Check-Ins         │
